@@ -49,7 +49,7 @@ def hologram_effect(img):
     out = cv2.addWeighted(img, 0.5, holo_blur, 0.6, 0)
     return out
 
-def get_frame(cap, background_scaled, speed=True):
+def get_frame(cap, background_scaled, speed=True, effect=None):
     _, frame = cap.read()
     # fetch the mask with retries (the app needs to warmup and we're lazy)
     # e v e n t u a l l y c o n s i s t e n t
@@ -71,11 +71,13 @@ def get_frame(cap, background_scaled, speed=True):
     
     # post-process mask and frame
     mask = post_process_mask(mask)
-    #frame = hologram_effect(frame)
+    if effect is not None:        
+        effect_fun = globals()[effect + '_effect']
+        frame = effect_fun(frame)
 
     # composite the foreground and background
     inv_mask = 1-mask
-    for c in range(frame.shape[2]):
+    for c in range(frame.shape[2]):       
        frame[:,:,c] = frame[:,:,c]*mask + background_scaled[:,:,c]*inv_mask
 
 
@@ -89,6 +91,9 @@ if __name__ == '__main__':
     width = int(os.environ.get('CAMERA_WIDTH',640))
     height = int(os.environ.get('CAMERA_HEIGHT',360))
     cam_fps = int(os.environ.get('CAMERA_FPS',24))
+    is_background_video = os.environ.get('IS_VID_BACKGROUND', 'false') == 'true'
+    background_file_path = os.environ.get('BACKGROUND_FILE', '/data/background.jpg')
+    effect = os.environ.get('EFFECT', None)
 
     # setup access to the *real* webcam
     cap = cv2.VideoCapture(actual_device)
@@ -101,23 +106,34 @@ if __name__ == '__main__':
     fake = pyfakewebcam.FakeWebcam(fake_device, width, height)
 
     # load the virtual background
-    background_file_path = "/data/background.jpg"
-    background = cv2.imread(background_file_path)
-    background_scaled = cv2.resize(background, (width, height))
+    _background_scaled = {}
+    if is_background_video:
+        def get_background_scaled(width, height):
+            if int(time.time()) % 10 == 0 or len(_background_scaled) == 0:
+                updated_background_file_size = os.stat(background_file_path).st_size
+                if updated_background_file_size != _background_scaled.get('size', None):
+                    if 'cap' in _background_scaled:
+                        _background_scaled['cap'].release()
+                    _background_scaled['cap'] = cv2.VideoCapture(background_file_path)
+                    _background_scaled['size'] = updated_background_file_size
+            background_cap = _background_scaled['cap']
+            success, frame = background_cap.read()
+            if success:
+                return cv2.resize(frame, (width, height))
+            background_cap.set(cv2.CAP_PROP_POS_FRAMES, 1)
+            return get_background_scaled(width, height)
+    else:
+        def get_background_scaled(width, height):
+            if int(time.time()) % 10 == 0 or len(_background_scaled) == 0:
+                updated_background_file_size = os.stat(background_file_path).st_size
+                if updated_background_file_size != _background_scaled.get('size', None):
+                    background = cv2.imread(background_file_path)
+                    _background_scaled['frame'] = cv2.resize(background,(width, height))
+                    _background_scaled['size'] = updated_background_file_size
+            return _background_scaled['frame']
 
-    org_background_file_size = os.stat(background_file_path).st_size
-
-    # frames forever
     while True:
-
-        frame = get_frame(cap, background_scaled)
+        frame = get_frame(cap, get_background_scaled(width, height), effect=effect)
         # fake webcam expects RGB
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         fake.schedule_frame(frame)
-
-        if int(time.time()) % 3 == 0:
-            updated_background_file_size = os.stat(background_file_path).st_size
-            if updated_background_file_size != org_background_file_size:
-                background = cv2.imread(background_file_path)
-                background_scaled = cv2.resize(background,(width, height))
-                org_background_file_size = updated_background_file_size

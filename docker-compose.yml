@@ -24,12 +24,13 @@ services:
     environment:
       ACTUAL_CAMERA: "/dev/video0"
       FAKE_CAMERA: "/dev/video20"
-      CAMERA_WIDTH: "640"
-      CAMERA_HEIGHT: "360"
-      #CAMERA_WIDTH: "1280"
-      #CAMERA_HEIGHT: "720"
-      CAMERA_FPS: "24"
+      CAMERA_WIDTH: "1280"
+      CAMERA_HEIGHT: "720"
+      CAMERA_FPS: "30"
       BODYPIX_URL: http://bodypix:9000
+      IS_VID_BACKGROUND: "true"
+      BACKGROUND_FILE: "/data/background.mp4"
+      #EFFECT: "hologram"
     volumes:
         - ./data:/data
     devices:

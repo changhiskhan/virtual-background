@@ -3,9 +3,8 @@ const bodyPix = require('@tensorflow-models/body-pix');
 const http = require('http');
 (async () => {
     const net = await bodyPix.load({
-        architecture: 'MobileNetV1',
+        architecture: 'ResNet50',
         outputStride: 16,
-        multiplier: 0.75,
         quantBytes: 2,
     });
     const server = http.createServer();
@@ -18,8 +17,8 @@ const http = require('http');
             const image = tf.node.decodeImage(Buffer.concat(chunks));
             segmentation = await net.segmentPerson(image, {
                 flipHorizontal: false,
-                internalResolution: 'medium',
-                segmentationThreshold: 0.5,
+                internalResolution: 'high',
+                segmentationThreshold: 0.7,
             });
             res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
             res.write(Buffer.from(segmentation.data));
